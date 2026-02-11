@@ -13,12 +13,18 @@ CHATBOT_SCRIPT = ROOT / "src" / "chatbot" / "chatbot.py"
 
 def run_script(script_path: Path) -> None:
     script_dir = str(script_path.parent.resolve())
-    sys.path.insert(0, script_dir)
+    src_dir = str(ROOT.joinpath("src").resolve())
+    inserted: list[str] = []
+    for candidate in (script_dir, src_dir):
+        if candidate not in sys.path:
+            sys.path.insert(0, candidate)
+            inserted.append(candidate)
     try:
         runpy.run_path(str(script_path), run_name="__main__")
     finally:
-        if sys.path and sys.path[0] == script_dir:
-            sys.path.pop(0)
+        for candidate in reversed(inserted):
+            if candidate in sys.path:
+                sys.path.remove(candidate)
 
 
 def main() -> None:

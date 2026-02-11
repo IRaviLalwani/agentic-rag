@@ -11,10 +11,8 @@ from typing import Any
 import requests
 from dotenv import load_dotenv
 
-from path_config import get_ingest_db_path
+from path_config import get_error_log_file, get_ingest_db_path, get_log_dir
 
-LOG_DIR = Path("logs")
-ERROR_LOG_FILE = LOG_DIR / "errorlogs.txt"
 LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 
 
@@ -32,8 +30,9 @@ def get_logger() -> logging.Logger:
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
 
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    error_file_handler = logging.FileHandler(ERROR_LOG_FILE, encoding="utf-8")
+    log_dir = get_log_dir()
+    log_dir.mkdir(parents=True, exist_ok=True)
+    error_file_handler = logging.FileHandler(get_error_log_file(), encoding="utf-8")
     error_file_handler.setLevel(logging.ERROR)
     error_file_handler.setFormatter(formatter)
 
@@ -129,6 +128,18 @@ def embed_text(base_url: str, model: str, text: str) -> list[float]:
     if not isinstance(vector, list):
         raise RuntimeError("Unexpected embedding vector shape")
     return vector
+
+
+def ensure_ollama_available(base_url: str) -> None:
+    tags_url = f"{base_url}/api/tags"
+    try:
+        response = requests.get(tags_url, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            "Cannot reach Ollama at "
+            f"{base_url}. Start Ollama (default: ollama serve) and verify OLLAMA_BASE_URL."
+        ) from exc
 
 
 def retrieve_context(
@@ -233,6 +244,7 @@ def main() -> None:
         min_similarity = parse_float_env("CHAT_MIN_SIMILARITY", 0.15)
         max_context_chars = parse_int_env("CHAT_MAX_CONTEXT_CHARS", 3600)
         request_timeout = parse_int_env("CHAT_REQUEST_TIMEOUT", 300)
+        ensure_ollama_available(base_url)
 
         records = read_ingested_rows(db_path)
 
@@ -254,7 +266,11 @@ def main() -> None:
         print("Type 'exit' to quit.")
 
         while True:
-            question = input("\nYou: ").strip()
+            try:
+                question = input("\nYou: ").strip()
+            except EOFError:
+                print("\nBye.")
+                break
             if not question:
                 continue
             if question.lower() in {"exit", "quit"}:

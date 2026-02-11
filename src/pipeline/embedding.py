@@ -32,6 +32,18 @@ def write_jsonl(path: Path, records: list[dict]) -> None:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+def ensure_ollama_available(base_url: str) -> None:
+    tags_url = f"{base_url}/api/tags"
+    try:
+        response = requests.get(tags_url, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            "Cannot reach Ollama at "
+            f"{base_url}. Start Ollama (default: ollama serve) and verify OLLAMA_BASE_URL."
+        ) from exc
+
+
 def embed_text(base_url: str, model: str, text: str) -> list[float]:
     embed_url = f"{base_url}/api/embed"
     response = requests.post(
@@ -77,6 +89,7 @@ def run() -> Path:
     selected_model = (os.getenv("OLLAMA_EMBED_MODEL") or "").strip()
     if not selected_model:
         raise RuntimeError("Missing OLLAMA_EMBED_MODEL in .env")
+    ensure_ollama_available(base_url)
 
     chunks = read_jsonl(chunk_file)
     logger.info("Embedding process is going on for %d chunks.", len(chunks))
